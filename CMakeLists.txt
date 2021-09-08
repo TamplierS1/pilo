@@ -28,6 +28,7 @@ list(APPEND CXX_INCLUDE_DIRS "include")
 # fmtlib
 find_package(fmt)
 list(APPEND CXX_LINK_LIBS fmt::fmt-header-only)
+list(APPEND CXX_LINK_LIBS ncurses)
 
 target_compile_options(pilo PRIVATE ${CXX_COMPILE_FLAGS})
 target_link_options(pilo PRIVATE ${CXX_LINK_FLAGS})

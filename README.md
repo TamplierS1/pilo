@@ -1,6 +1,10 @@
 ## pilo
 
-Simple code Pilo written in C++.
+Simple code editor written in C++.
+
+## Dependencies
+
+- [ncurses](https://invisible-island.net/ncurses/announce.html)
 
 ## Build
 
