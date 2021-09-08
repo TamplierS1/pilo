@@ -1,8 +1,12 @@
+#include "editor.h"
+
+#include <ncurses.h>
+
+#include <chrono>
+#include <ctime>
 #include <iostream>
 
-#include "fmt/printf.h"
-
-#include "editor.h"
+#include "fmt/core.h"
 
 namespace Pilo
 {
@@ -43,6 +47,7 @@ void Editor::enable_raw_mode()
 
     // The maximum amount of time to wait (in ms) before 'std::cin.read()' returns.
     term_attribs.c_cc[VTIME] = 1;
+    // TODO: setup better error handling instead of just dying.
     if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &term_attribs) == -1)
         die("tcsetattr");
 }
@@ -51,9 +56,38 @@ winsize Editor::get_window_size()
 {
     winsize size;
     if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &size) == -1 || size.ws_col == 0)
-        die("ioctl (get_window_size)");
+    {
+        // If ioctl didn't work, use this fallback method
+        // to get window size.
+        fmt::print("\x1b[999C\x1b[999B");
+        Vec2 pos = get_cursor_pos();
+        size.ws_row = pos.y;
+        size.ws_col = pos.x;
+    }
 
     return size;
+}
+
+Vec2 Editor::get_cursor_pos()
+{
+    std::string response;
+    while (true)
+    {
+        char c;
+        std::cin.read(&c, 1);
+        response += c;
+        if (c == 'R')
+            break;
+    }
+
+    // TODO: do something when an ill-formed response is received.
+    //    if (response[0] != '\x1b' || response[1] != '[')
+    Vec2 pos;
+    // TODO: also do some error handling.
+    // I could something with stringstreams, but they take
+    // way more lines of code than sscanf does.
+    sscanf(response.c_str(), "\x1b[%d;%d", &pos.y, &pos.x);
+    return pos;
 }
 
 void Editor::start()
@@ -63,6 +97,8 @@ void Editor::start()
 
     m_started = true;
     enable_raw_mode();
+
+    m_window_size = get_window_size();
 
     while (true)
     {
@@ -79,6 +115,36 @@ char Editor::read_key()
         if (std::cin.bad())
             die("read");
     }
+
+    // Read escape sequences.
+    if (c == '\x1b')
+    {
+        std::string seq;
+        // Read two additional chars.
+        if (!std::cin.read(&c, 1).good())
+            return '\x1b';
+        seq += c;
+        if (!std::cin.read(&c, 1).good())
+            return '\x1b';
+        seq += c;
+
+        if (seq[0] == '[')
+        {
+            switch (seq[1])
+            {
+                case 'A':
+                    return 'w';
+                case 'B':
+                    return 's';
+                case 'C':
+                    return 'd';
+                case 'D':
+                    return 'a';
+            }
+        }
+
+        return '\x1b';
+    }
     return c;
 }
 
@@ -91,54 +157,98 @@ void Editor::process_input()
         case ctrl_key('q'):
             exit();
             break;
+        case 'w':
+            m_cursor_pos.y--;
+            break;
+        case 's':
+            m_cursor_pos.y++;
+            break;
+        case 'a':
+            m_cursor_pos.x--;
+            break;
+        case 'd':
+            m_cursor_pos.x++;
+            break;
         default:
             break;
     }
+}
+
+void Editor::write(const std::string& str)
+{
+    m_draw_buffer += str;
+}
+
+void Editor::issue_command(CnSeq seq)
+{
+    fmt::print("{}", m_control_commands_map[seq]);
+}
+
+void Editor::move_cursor(Vec2 pos)
+{
+    // The terminal starts counting from 1, not 0.
+    fmt::print("\x1b[{};{}H", pos.y + 1, pos.x + 1);
 }
 
 void Editor::exit()
 {
     // Add any cleanup code here.
 
-    clear_screen();
-    cursor_to_origin();
+    issue_command(CnSeq::ClearScreen);
+    issue_command(CnSeq::CursorToOrigin);
 
     std::exit(EXIT_FAILURE);
 }
 
 void Editor::die(std::string_view msg)
 {
-    clear_screen();
-    cursor_to_origin();
+    issue_command(CnSeq::ClearScreen);
+    issue_command(CnSeq::CursorToOrigin);
 
     std::perror(msg.data());
     std::exit(EXIT_FAILURE);
 }
 
+std::string Editor::get_current_time() const
+{
+    using namespace std;
+    time_t now = chrono::system_clock::to_time_t(chrono::system_clock::now());
+    return std::ctime(&now);
+}
+
 void Editor::refresh_screen()
 {
-    clear_screen();
-    cursor_to_origin();
-    draw_tildes();
-    cursor_to_origin();
+    issue_command(CnSeq::HideCursor);
+    issue_command(CnSeq::CursorToOrigin);
+
+    draw_rows();
+    issue_command(CnSeq::CursorToOrigin);
+
+    fmt::print("{}", m_draw_buffer);
+    move_cursor(m_cursor_pos);
+
+    issue_command(CnSeq::ShowCursor);
 }
 
-void Editor::draw_tildes()
+void Editor::draw_rows()
 {
-    for (int y = 0; y < get_window_size().ws_row; y++)
+    for (int y = 0; y < m_window_size.ws_row; y++)
     {
-        std::cout.write("~\r\n", 3);
+        if (y == m_window_size.ws_row - 1)
+        {
+            write("Pilo editor -- ");
+            write(get_current_time());
+            continue;
+        }
+
+        write("~");
+
+        issue_command(CnSeq::EraseLineRight);
+
+        // Don't print \r\n on the last line.
+        if (y < m_window_size.ws_row - 1)
+            write("\r\n");
     }
-}
-
-void Editor::cursor_to_origin()
-{
-    std::cout.write("\x1b[H", 3);
-}
-
-void Editor::clear_screen()
-{
-    std::cout.write("\x1b[2J", 4);
 }
 
 }
