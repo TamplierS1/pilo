@@ -1,77 +1,78 @@
 #ifndef EDITOR_H
 #define EDITOR_H
 
-#include <termios.h>
-#include <unistd.h>
-#include <string_view>
 #include <cctype>
-#include <sys/ioctl.h>
+#include <chrono>
 #include <string>
+#include <string_view>
 #include <unordered_map>
+
+#include "ncurses.h"
 
 namespace Pilo
 {
-// Return the scancode of `key` pressed with ctrl.
-constexpr char ctrl_key(uint8_t key);
-
 struct Vec2
 {
     int x = 0;
     int y = 0;
 };
 
-// Control commands that can be sent to the terminal.
-enum class CnSeq
+constexpr char ctrl_key(char key)
 {
-    ClearScreen,
-    CursorToOrigin,
-    ReportCursorPos,
-    HideCursor,
-    ShowCursor,
-    // Erase everything in the line to the right of the cursor
-    EraseLineRight
-};
+    return key & 0x1f;
+}
+
+inline Vec2 get_window_size()
+{
+    Vec2 winsize;
+    getmaxyx(stdscr, winsize.y, winsize.x);
+    return winsize;
+}
+
+inline Vec2 get_cursor_pos()
+{
+    Vec2 pos;
+    getyx(stdscr, pos.y, pos.x);
+    return pos;
+}
+
+inline std::string get_current_time()
+{
+    using namespace std;
+    time_t now = chrono::system_clock::to_time_t(chrono::system_clock::now());
+    return std::ctime(&now);
+}
 
 class Editor
 {
 public:
+    Editor()
+    {
+        initscr();
+        raw();
+        noecho();
+        keypad(stdscr, TRUE);
+        halfdelay(1);
+
+        m_window_size = get_window_size();
+    }
+
     ~Editor()
     {
-
+        endwin();
     }
 
     void start();
 
 private:
-    void enable_raw_mode();
-    winsize get_window_size();
-    Vec2 get_cursor_pos();
-    std::string get_current_time() const;
-
-    void refresh_screen();
     void process_input();
+    void refresh_screen();
 
     void draw_rows();
-    char read_key();
-    void write(const std::string& str);
-    // Use this to issue basic commands that don't require parameters.
-    void issue_command(CnSeq seq);
     void move_cursor(Vec2 pos);
 
-    void exit();
-    void die(std::string_view msg);
-
-    termios m_original;
-    bool m_started = false;
-    std::string m_draw_buffer;
-
-    winsize m_window_size;
+    Vec2 m_window_size;
     Vec2 m_cursor_pos = {0, 0};
-
-    std::unordered_map<CnSeq, std::string> m_control_commands_map = {
-        {CnSeq::ClearScreen, "\x1b[2J"},     {CnSeq::CursorToOrigin, "\x1b[H"},
-        {CnSeq::ReportCursorPos, "\x1b[6n"}, {CnSeq::HideCursor, "\x1b[?25l"},
-        {CnSeq::ShowCursor, "\x1b[?25h"},    {CnSeq::EraseLineRight, "\x1b[K"}};
 };
 }
 
