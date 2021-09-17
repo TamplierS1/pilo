@@ -1,5 +1,4 @@
 #include "editor.h"
-#include "ncurses.h"
 
 int main()
 {
