@@ -6,6 +6,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <vector>
 
 #include "ncurses.h"
 
@@ -15,6 +16,12 @@ struct Vec2
 {
     int x = 0;
     int y = 0;
+};
+
+enum class State
+{
+    Alive,
+    Dead
 };
 
 constexpr char ctrl_key(char key)
@@ -62,17 +69,27 @@ public:
         endwin();
     }
 
-    void start();
+    void run(const std::string& filename);
 
 private:
     void process_input();
     void refresh_screen();
+    // If no arguments were provided `m_filename` will be used
+    // to read the file into `m_rows`.
+    void read_file(std::string_view filename = "");
 
     void draw_rows();
     void move_cursor(Vec2 pos);
 
     Vec2 m_window_size;
     Vec2 m_cursor_pos = {0, 0};
+    State m_editor_state = State::Alive;
+
+    std::vector<std::string> m_rows;
+    std::string m_filename;
+    // The line of the file to start drawing text from.
+    // Used to scroll the file.
+    int m_starting_line_num = 0;
 };
 }
 
