@@ -24,22 +24,37 @@ enum class State
     Dead
 };
 
+// This enum is often converted to int, short, etc.
+// So it's easier to use a plain enum instead of `enum class`.
+enum ColorPairs
+{
+    // You can't use 0 as a color pair in ncurses.
+    ColorStatusWin = 1,
+};
+
+enum Colors
+{
+    ColorBlack,
+    ColorGrey,
+    ColorGreen,
+};
+
 constexpr char ctrl_key(char key)
 {
     return key & 0x1f;
 }
 
-inline Vec2 get_window_size()
+inline Vec2 get_window_size(WINDOW* win)
 {
     Vec2 winsize;
-    getmaxyx(stdscr, winsize.y, winsize.x);
+    getmaxyx(win, winsize.y, winsize.x);
     return winsize;
 }
 
-inline Vec2 get_cursor_pos()
+inline Vec2 get_cursor_pos(WINDOW* win)
 {
     Vec2 pos;
-    getyx(stdscr, pos.y, pos.x);
+    getyx(win, pos.y, pos.x);
     return pos;
 }
 
@@ -53,35 +68,30 @@ inline std::string get_current_time()
 class Editor
 {
 public:
-    Editor()
-    {
-        initscr();
-        raw();
-        noecho();
-        keypad(stdscr, TRUE);
-        halfdelay(1);
-
-        m_window_size = get_window_size();
-    }
-
-    ~Editor()
-    {
-        endwin();
-    }
+    Editor();
+    ~Editor();
 
     void run(const std::string& filename);
 
 private:
+    void init_terminal();
+    void init_colors();
+    void init_windows();
+
     void process_input();
     void refresh_screen();
     // If no arguments were provided `m_filename` will be used
     // to read the file into `m_rows`.
     void read_file(std::string_view filename = "");
 
-    void draw_rows();
-    void move_cursor(Vec2 pos);
+    void render_editor_window();
+    void render_status_window();
+    void move_cursor(WINDOW* win, Vec2 pos);
 
-    Vec2 m_window_size;
+    WINDOW* create_window(Vec2 size, Vec2 pos) const;
+    void delete_window(WINDOW* win);
+
+    Vec2 m_screen_size;
     Vec2 m_cursor_pos = {0, 0};
     State m_editor_state = State::Alive;
 
@@ -90,6 +100,8 @@ private:
     // The line of the file to start drawing text from.
     // Used to scroll the file.
     int m_starting_line_num = 0;
+
+    WINDOW* m_status_window = nullptr;
 };
 }
 
