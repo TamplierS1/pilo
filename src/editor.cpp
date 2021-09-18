@@ -7,6 +7,19 @@
 
 namespace Pilo
 {
+Editor::Editor()
+{
+    init_terminal();
+    init_colors();
+    init_windows();
+}
+
+Editor::~Editor()
+{
+    delete_window(m_status_window);
+    endwin();
+}
+
 void Editor::run(const std::string& filename)
 {
     m_filename = filename;
@@ -17,6 +30,29 @@ void Editor::run(const std::string& filename)
         process_input();
         refresh_screen();
     }
+}
+
+void Editor::init_terminal()
+{
+    initscr();
+    raw();
+    noecho();
+    keypad(stdscr, TRUE);
+    halfdelay(1);
+}
+
+void Editor::init_colors()
+{
+    start_color();
+    init_pair(ColorStatusWin, COLOR_BLUE, COLOR_BLACK);
+}
+
+void Editor::init_windows()
+{
+    m_screen_size = get_window_size(stdscr);
+    wresize(stdscr, m_screen_size.y - 1, m_screen_size.x);
+
+    m_status_window = create_window({m_screen_size.x, 1}, {0, m_screen_size.y - 1});
 }
 
 void Editor::process_input()
@@ -41,12 +77,12 @@ void Editor::process_input()
             break;
         case KEY_DOWN:
             m_cursor_pos.y++;
-            if (m_cursor_pos.y >= m_window_size.y)
+            if (m_cursor_pos.y >= m_screen_size.y)
             {
                 if (m_starting_line_num + m_cursor_pos.y < m_rows.size())
                     m_starting_line_num++;
 
-                m_cursor_pos.y = m_window_size.y - 1;
+                m_cursor_pos.y = m_screen_size.y - 1;
             }
             break;
         case KEY_LEFT:
@@ -56,8 +92,8 @@ void Editor::process_input()
             break;
         case KEY_RIGHT:
             m_cursor_pos.x++;
-            if (m_cursor_pos.x >= m_window_size.x)
-                m_cursor_pos.x = m_window_size.x - 1;
+            if (m_cursor_pos.x >= m_screen_size.x)
+                m_cursor_pos.x = m_screen_size.x - 1;
             break;
         case ERR:  // No character has been typed.
         default:
@@ -65,32 +101,40 @@ void Editor::process_input()
     }
 }
 
-void Editor::draw_rows()
+void Editor::render_editor_window()
 {
-    for (int y = 0; y < m_window_size.y; y++)
-    {
-        if (y == m_window_size.y - 1)
-        {
-            printw(m_filename.c_str());
-            printw(" -- ");
-            printw(get_current_time().c_str());
-            break;
-        }
+    move_cursor(stdscr, {0, 0});
 
+    for (int y = 0; y < m_screen_size.y; y++)
+    {
         if (y + m_starting_line_num < m_rows.size())
         {
-            printw(m_rows[y + m_starting_line_num].c_str());
+            wprintw(stdscr, m_rows[y + m_starting_line_num].c_str());
         }
     }
 }
 
+void Editor::render_status_window()
+{
+    move_cursor(m_status_window, {0, 0});
+
+    wattron(m_status_window, COLOR_PAIR(ColorStatusWin) | A_BOLD);
+    wprintw(m_status_window, m_filename.c_str());
+    wprintw(m_status_window, " -- ");
+    wprintw(m_status_window, get_current_time().c_str());
+    wprintw(m_status_window, "\n");
+    wattroff(m_status_window, COLOR_PAIR(ColorStatusWin) | A_BOLD);
+}
+
 void Editor::refresh_screen()
 {
-    move_cursor({0, 0});
-    draw_rows();
-    move_cursor({0, 0});
-    refresh();
-    move_cursor(m_cursor_pos);
+    render_editor_window();
+    render_status_window();
+
+    wrefresh(stdscr);
+    wrefresh(m_status_window);
+
+    move_cursor(stdscr, m_cursor_pos);
 }
 
 void Editor::read_file(std::string_view filename)
@@ -116,8 +160,19 @@ void Editor::read_file(std::string_view filename)
     }
 }
 
-void Editor::move_cursor(Vec2 pos)
+void Editor::move_cursor(WINDOW* win, Vec2 pos)
 {
-    move(pos.y, pos.x);
+    wmove(win, pos.y, pos.x);
+}
+
+WINDOW* Editor::create_window(Vec2 size, Vec2 pos) const
+{
+    auto win = newwin(size.y, size.x, pos.y, pos.x);
+    return win;
+}
+
+void Editor::delete_window(WINDOW* win)
+{
+    delwin(win);
 }
 }
