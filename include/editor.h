@@ -83,25 +83,39 @@ private:
     // If no arguments were provided `m_filename` will be used
     // to read the file into `m_rows`.
     void read_file(std::string_view filename = "");
+    void save_to_file();
 
     void render_editor_window();
+    void render_side_window();
     void render_status_window();
+
     void move_cursor(WINDOW* win, Vec2 pos);
+    bool write(Vec2 pos, char ch);
+    bool del(Vec2 pos);
 
     WINDOW* create_window(Vec2 size, Vec2 pos) const;
     void delete_window(WINDOW* win);
 
-    Vec2 m_screen_size;
+    Vec2 m_editor_win_size;
     Vec2 m_cursor_pos = {0, 0};
     State m_editor_state = State::Alive;
 
+    WINDOW* m_status_window = nullptr;
+    WINDOW* m_side_window = nullptr;
+
+    // Editor window
     std::vector<std::string> m_rows;
     std::string m_filename;
     // The line of the file to start drawing text from.
     // Used to scroll the file.
     int m_starting_line_num = 0;
 
-    WINDOW* m_status_window = nullptr;
+    // Side window
+    int m_side_win_width = 5;
+
+    // Status window
+    int m_status_win_height = 1;
+    std::string m_last_error;
 };
 }
 
