@@ -2,6 +2,7 @@
 
 #include <ncurses.h>
 
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 
@@ -104,9 +105,21 @@ void Editor::process_input()
             break;
         case 8:  // Backspace
         case 127:
+        {
+            // If a line gets deleted, the cursor will be moved to this index.
+            int new_cursor_pos = m_rows[m_cursor_pos.y - 1].size() - 1;
             if (del(m_cursor_pos))
+            {
+                if (m_cursor_pos.x == 0)
+                {
+                    m_cursor_pos.y--;
+                    m_cursor_pos.x = new_cursor_pos;
+                    break;
+                }
                 m_cursor_pos.x--;
+            }
             break;
+        }
         case '\n':
             if (write(m_cursor_pos, ch))
             {
@@ -152,9 +165,11 @@ void Editor::render_status_window()
     move_cursor(m_status_window, {0, 0});
 
     wattron(m_status_window, COLOR_PAIR(ColorStatusWin) | A_BOLD);
-    wprintw(m_status_window, "%s -- %s -- %d;%d %s\n", m_filename.c_str(),
-            get_current_time().c_str(), m_cursor_pos.x, m_cursor_pos.y,
-            m_last_error.c_str());
+    wprintw(m_status_window, "%s -- %s\n", m_filename.c_str(),
+            get_current_time().c_str());
+    // ! Debug information.
+    // wprintw(m_status_window, "%d;%d", m_cursor_pos.x, m_cursor_pos.y);
+    // wprintw(m_status_window, " -- %s", m_rows[m_cursor_pos.y].c_str());
     wattroff(m_status_window, COLOR_PAIR(ColorStatusWin) | A_BOLD);
 }
 
@@ -173,6 +188,12 @@ void Editor::refresh_screen()
 
 void Editor::read_file(std::string_view filename)
 {
+    if (!std::filesystem::exists(filename))
+    {
+        std::ofstream new_file{filename.data()};
+        new_file << " ";
+    }
+
     std::ifstream file_stream{filename.data()};
     file_stream.exceptions(std::ifstream::badbit | std::ifstream::failbit);
 
@@ -214,17 +235,21 @@ bool Editor::write(Vec2 pos, char ch)
 {
     if (pos.y >= m_rows.size())
     {
-        // ! Maybe use {fmt} here instead of sprintf.
-        sprintf(m_last_error.data(), "Failed to write %c to %d;%d.", ch, pos.x, pos.y);
         return false;
     }
     else if (pos.x >= m_rows[pos.y].size())
     {
-        sprintf(m_last_error.data(), "Failed to write %c to %d;%d.", ch, pos.x, pos.y);
         return false;
     }
 
     m_rows[pos.y].insert(pos.x, 1, ch);
+
+    if (ch == '\n')
+    {
+        m_rows.insert(m_rows.begin() + pos.y + 1, m_rows[pos.y].substr(pos.x + 1));
+        // Remove the contents that were appended from the previous line.
+        m_rows[pos.y] = m_rows[pos.y].substr(0, pos.x + 1);
+    }
 
     return true;
 }
@@ -233,13 +258,27 @@ bool Editor::del(Vec2 pos)
 {
     if (pos.y >= m_rows.size())
     {
-        // ! Maybe use {fmt} here instead of sprintf.
-        sprintf(m_last_error.data(), "Failed to delete a char in %d;%d.", pos.x, pos.y);
         return false;
     }
     else if (pos.x >= m_rows[pos.y].size() || pos.x <= 0)
     {
-        sprintf(m_last_error.data(), "Failed to delete a char in %d;%d.", pos.x, pos.y);
+        // Handle deleting lines.
+        if (pos.x == 0)
+        {
+            // Lines that only contain '\n'.
+            if (m_rows[pos.y][pos.x] == '\n')
+            {
+                m_rows.erase(m_rows.begin() + pos.y);
+                return true;
+            }
+
+            // Delete the last character (it's always \n).
+            m_rows[pos.y - 1] = m_rows[pos.y - 1].substr(0, m_rows[pos.y - 1].size() - 1);
+
+            m_rows[pos.y - 1] += m_rows[pos.y];
+            m_rows.erase(m_rows.begin() + pos.y);
+            return true;
+        }
         return false;
     }
 
