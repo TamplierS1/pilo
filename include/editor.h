@@ -115,7 +115,6 @@ private:
 
     // Status window
     int m_status_win_height = 1;
-    std::string m_last_error;
 };
 }
 
