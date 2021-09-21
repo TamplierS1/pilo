@@ -16,6 +16,8 @@ std::optional<std::string> retrieve_filename(int charc, char** charv)
     }
 }
 
+// This comment was written using this editor :)
+
 int main(int charc, char** charv)
 {
     auto filename = retrieve_filename(charc, charv);
