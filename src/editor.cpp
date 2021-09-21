@@ -73,44 +73,26 @@ void Editor::process_input()
             save_to_file();
             break;
         case KEY_UP:
-            m_cursor_pos.y--;
-            if (m_cursor_pos.y < 0)
-            {
-                if (m_starting_line_num != 0)
-                    m_starting_line_num--;
-
-                m_cursor_pos.y = 0;
-            }
-
+            move_cursor_up();
             break;
         case KEY_DOWN:
-            m_cursor_pos.y++;
-            if (m_cursor_pos.y >= m_editor_win_size.y)
-            {
-                if (m_starting_line_num + m_cursor_pos.y < m_rows.size())
-                    m_starting_line_num++;
-
-                m_cursor_pos.y = m_editor_win_size.y - 1;
-            }
+            move_cursor_down();
             break;
         case KEY_LEFT:
-            m_cursor_pos.x--;
-            if (m_cursor_pos.x < 0)
-                m_cursor_pos.x = 0;
+            move_cursor_left();
             break;
         case KEY_RIGHT:
-            m_cursor_pos.x++;
-            if (m_cursor_pos.x >= m_editor_win_size.x)
-                m_cursor_pos.x = m_editor_win_size.x - 1;
+            move_cursor_right();
             break;
         case 8:  // Backspace
         case 127:
         {
+            // TODO: make a ctrl-backspace hotkey. And something to delete entire lines.
             // If a line gets deleted, the cursor will be moved to this index.
-            int new_cursor_pos = m_rows[m_cursor_pos.y - 1].size() - 1;
-            if (del(m_cursor_pos))
+            int new_cursor_pos = m_rows[cur_pos_in_editor().y - 1].size() - 1;
+            if (del(cur_pos_in_editor()))
             {
-                if (m_cursor_pos.x == 0)
+                if (cur_pos_in_editor().x == 0)
                 {
                     m_cursor_pos.y--;
                     m_cursor_pos.x = new_cursor_pos;
@@ -121,16 +103,28 @@ void Editor::process_input()
             break;
         }
         case '\n':
-            if (write(m_cursor_pos, ch))
+            if (write(cur_pos_in_editor(), ch))
             {
                 m_cursor_pos.y++;
                 m_cursor_pos.x = 0;
             }
             break;
+        case '\t':
+            if (write(cur_pos_in_editor(), ' '))
+            {
+                m_cursor_pos.x++;
+                write(cur_pos_in_editor(), ' ');
+                m_cursor_pos.x++;
+                write(cur_pos_in_editor(), ' ');
+                m_cursor_pos.x++;
+                write(cur_pos_in_editor(), ' ');
+                m_cursor_pos.x++;
+            }
+            break;
         case ERR:  // No character has been typed.
             break;
         default:
-            if (write(m_cursor_pos, ch))
+            if (write(cur_pos_in_editor(), ch))
                 m_cursor_pos.x++;
             break;
     }
@@ -165,11 +159,11 @@ void Editor::render_status_window()
     move_cursor(m_status_window, {0, 0});
 
     wattron(m_status_window, COLOR_PAIR(ColorStatusWin) | A_BOLD);
-    wprintw(m_status_window, "%s -- %s\n", m_filename.c_str(),
-            get_current_time().c_str());
+    // wprintw(m_status_window, "%s -- %s\n", m_filename.c_str(),
+    //         get_current_time().c_str());
     // ! Debug information.
-    // wprintw(m_status_window, "%d;%d", m_cursor_pos.x, m_cursor_pos.y);
-    // wprintw(m_status_window, " -- %s", m_rows[m_cursor_pos.y].c_str());
+    wprintw(m_status_window, "%d;%d", cur_pos_in_editor().x, cur_pos_in_editor().y);
+    wprintw(m_status_window, " -- %s", m_rows[cur_pos_in_editor().y].c_str());
     wattroff(m_status_window, COLOR_PAIR(ColorStatusWin) | A_BOLD);
 }
 
@@ -231,6 +225,62 @@ void Editor::move_cursor(WINDOW* win, Vec2 pos)
     wmove(win, pos.y, pos.x);
 }
 
+void Editor::move_cursor_down()
+{
+    m_cursor_pos.y++;
+    if (m_cursor_pos.y >= m_editor_win_size.y)
+    {
+        if (m_starting_line_num + m_cursor_pos.y < m_rows.size())
+            m_starting_line_num++;
+
+        m_cursor_pos.y = m_editor_win_size.y - 1;
+    }
+    else if (m_rows[cur_pos_in_editor().y].size() <= cur_pos_in_editor().x)
+    {
+        m_cursor_pos.x = m_rows[cur_pos_in_editor().y].size() - 1;
+    }
+}
+
+void Editor::move_cursor_up()
+{
+    m_cursor_pos.y--;
+    if (m_cursor_pos.y < 0)
+    {
+        if (m_starting_line_num != 0)
+            m_starting_line_num--;
+
+        m_cursor_pos.y = 0;
+    }
+    else if (m_rows[cur_pos_in_editor().y].size() <= cur_pos_in_editor().x)
+    {
+        m_cursor_pos.x = m_rows[cur_pos_in_editor().y].size() - 1;
+    }
+}
+
+void Editor::move_cursor_left()
+{
+    m_cursor_pos.x--;
+    if (m_cursor_pos.x < 0)
+    {
+        move_cursor_up();
+    }
+}
+
+void Editor::move_cursor_right()
+{
+    m_cursor_pos.x++;
+    if (cur_pos_in_editor().x >= m_rows[cur_pos_in_editor().y].size())
+    {
+        move_cursor_down();
+        m_cursor_pos.x = 0;
+    }
+}
+
+constexpr Vec2 Editor::cur_pos_in_editor() const
+{
+    return {m_cursor_pos.x, m_cursor_pos.y + m_starting_line_num};
+}
+
 bool Editor::write(Vec2 pos, char ch)
 {
     if (pos.y >= m_rows.size())
@@ -244,6 +294,7 @@ bool Editor::write(Vec2 pos, char ch)
 
     m_rows[pos.y].insert(pos.x, 1, ch);
 
+    // TODO: separate this case into a different method.
     if (ch == '\n')
     {
         m_rows.insert(m_rows.begin() + pos.y + 1, m_rows[pos.y].substr(pos.x + 1));
@@ -262,6 +313,7 @@ bool Editor::del(Vec2 pos)
     }
     else if (pos.x >= m_rows[pos.y].size() || pos.x <= 0)
     {
+        // TODO: separate this case into a different method.
         // Handle deleting lines.
         if (pos.x == 0)
         {

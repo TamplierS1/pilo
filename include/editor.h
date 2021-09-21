@@ -9,15 +9,10 @@
 #include <vector>
 
 #include "ncurses.h"
+#include "vec2.h"
 
 namespace Pilo
 {
-struct Vec2
-{
-    int x = 0;
-    int y = 0;
-};
-
 enum class State
 {
     Alive,
@@ -90,6 +85,12 @@ private:
     void render_status_window();
 
     void move_cursor(WINDOW* win, Vec2 pos);
+    void move_cursor_down();
+    void move_cursor_up();
+    void move_cursor_left();
+    void move_cursor_right();
+    // Convert cursor screen position to editor position.
+    constexpr Vec2 cur_pos_in_editor() const;
     bool write(Vec2 pos, char ch);
     bool del(Vec2 pos);
 
@@ -98,6 +99,7 @@ private:
 
     Vec2 m_editor_win_size;
     Vec2 m_cursor_pos = {0, 0};
+
     State m_editor_state = State::Alive;
 
     WINDOW* m_status_window = nullptr;
