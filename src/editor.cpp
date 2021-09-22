@@ -1,10 +1,15 @@
-#include "editor.h"
-
-#include <ncurses.h>
-
 #include <filesystem>
 #include <fstream>
 #include <sstream>
+
+#include <ncurses.h>
+
+#include "editor.h"
+#include "actions/write_action.h"
+#include "actions/quit_action.h"
+#include "actions/save_file_action.h"
+#include "actions/move_cursor_action.h"
+#include "actions/delete_action.h"
 
 namespace Pilo
 {
@@ -30,6 +35,7 @@ void Editor::run(const std::string& filename)
     while (m_editor_state == State::Alive)
     {
         process_input();
+        execute_actions();
         refresh_screen();
     }
 }
@@ -67,99 +73,67 @@ void Editor::process_input()
     switch (ch)
     {
         case ctrl_key('q'):
-            m_editor_state = State::Dead;
+        {
+            QuitAction action;
+            m_actions.emplace_back(std::make_unique<QuitAction>(action));
             break;
+        }
         case ctrl_key('s'):
-            save_to_file();
+        {
+            SaveFileAction action;
+            action.m_filename = m_filename;
+            m_actions.emplace_back(std::make_unique<SaveFileAction>(action));
             break;
+        }
         case g_key_ctrl_backspace:
         {
-            // TODO: separate all editor actions into `Action` class.
-            if (m_rows[cur_pos_in_editor().y][cur_pos_in_editor().x - 1] == ' ')
-            {
-                while (m_rows[cur_pos_in_editor().y][cur_pos_in_editor().x - 1] == ' ' &&
-                       cur_pos_in_editor().x != 0)
-                {
-                    if (del(cur_pos_in_editor()))
-                    {
-                        m_cursor_pos.x--;
-                    }
-                    else
-                    {
-                        break;
-                    }
-                }
-            }
-            else
-            {
-                while (m_rows[cur_pos_in_editor().y][cur_pos_in_editor().x - 1] != ' ' &&
-                       cur_pos_in_editor().x != 0)
-                {
-                    if (del(cur_pos_in_editor()))
-                    {
-                        m_cursor_pos.x--;
-                    }
-                    else
-                    {
-                        break;
-                    }
-                }
-            }
-
+            DeleteAction action;
+            action.m_mode = DeleteAction::Mode::Word;
+            m_actions.emplace_back(std::make_unique<DeleteAction>(action));
             break;
         }
         case KEY_UP:
-            move_cursor_up();
-            break;
-        case KEY_DOWN:
-            move_cursor_down();
-            break;
-        case KEY_LEFT:
-            move_cursor_left();
-            break;
-        case KEY_RIGHT:
-            move_cursor_right();
-            break;
-        case g_key_backspace:
         {
-            // If a line gets deleted, the cursor will be moved to this index.
-            int new_cursor_pos = m_rows[cur_pos_in_editor().y - 1].size() - 1;
-            if (del(cur_pos_in_editor()))
-            {
-                if (cur_pos_in_editor().x == 0)
-                {
-                    m_cursor_pos.y--;
-                    m_cursor_pos.x = new_cursor_pos;
-                    break;
-                }
-                m_cursor_pos.x--;
-            }
+            MoveCursorAction action;
+            action.m_dir = MoveCursorAction::Direction::Up;
+            m_actions.push_back(std::make_unique<MoveCursorAction>(action));
             break;
         }
-        case '\n':
-            if (write(cur_pos_in_editor(), ch))
-            {
-                m_cursor_pos.y++;
-                m_cursor_pos.x = 0;
-            }
+        case KEY_DOWN:
+        {
+            MoveCursorAction action;
+            action.m_dir = MoveCursorAction::Direction::Down;
+            m_actions.push_back(std::make_unique<MoveCursorAction>(action));
             break;
-        case '\t':
-            if (write(cur_pos_in_editor(), ' '))
-            {
-                m_cursor_pos.x++;
-                write(cur_pos_in_editor(), ' ');
-                m_cursor_pos.x++;
-                write(cur_pos_in_editor(), ' ');
-                m_cursor_pos.x++;
-                write(cur_pos_in_editor(), ' ');
-                m_cursor_pos.x++;
-            }
+        }
+        case KEY_LEFT:
+        {
+            MoveCursorAction action;
+            action.m_dir = MoveCursorAction::Direction::Left;
+            m_actions.push_back(std::make_unique<MoveCursorAction>(action));
             break;
+        }
+        case KEY_RIGHT:
+        {
+            MoveCursorAction action;
+            action.m_dir = MoveCursorAction::Direction::Right;
+            m_actions.push_back(std::make_unique<MoveCursorAction>(action));
+            break;
+        }
+        case g_key_backspace:
+        {
+            DeleteAction action;
+            action.m_mode = DeleteAction::Mode::Char;
+            m_actions.emplace_back(std::make_unique<DeleteAction>(action));
+            break;
+        }
         case ERR:  // No character has been typed.
             break;
         default:
-            if (write(cur_pos_in_editor(), ch))
-                m_cursor_pos.x++;
+            WriteAction action;
+            action.m_pos = cur_pos_in_editor();
+            action.m_ch = ch;
+            m_actions.emplace_back(std::make_unique<WriteAction>(action));
             break;
     }
 }
@@ -170,9 +144,9 @@ void Editor::render_editor_window()
 
     for (int y = 0; y < m_editor_win_size.y; y++)
     {
-        if (y + m_starting_line_num < m_rows.size())
+        if (y + m_starting_line_num < m_text.size())
         {
-            wprintw(stdscr, "%s", m_rows[y + m_starting_line_num].c_str());
+            wprintw(stdscr, "%s", m_text[y + m_starting_line_num].c_str());
         }
     }
 }
@@ -197,7 +171,8 @@ void Editor::render_status_window()
     //         get_current_time().c_str());
     // ! Debug information.
     wprintw(m_status_window, "%d;%d", cur_pos_in_editor().x, cur_pos_in_editor().y);
-    wprintw(m_status_window, " -- %s", m_rows[cur_pos_in_editor().y].c_str());
+    if (m_text.size() > cur_pos_in_editor().y)
+        wprintw(m_status_window, " -- %s", m_text[cur_pos_in_editor().y].c_str());
     wattroff(m_status_window, COLOR_PAIR(ColorStatusWin) | A_BOLD);
 }
 
@@ -212,6 +187,15 @@ void Editor::refresh_screen()
     wrefresh(m_side_window);
 
     move_cursor(stdscr, m_cursor_pos);
+}
+
+void Editor::execute_actions()
+{
+    for (auto& action : m_actions)
+    {
+        action->execute(*this);
+        m_actions.erase(m_actions.begin());
+    }
 }
 
 void Editor::read_file(std::string_view filename)
@@ -230,145 +214,21 @@ void Editor::read_file(std::string_view filename)
     std::string file = sstream.str();
 
     int y = 0;
-    m_rows.push_back("");
+    m_text.push_back("");
     for (const auto& c : file)
     {
-        m_rows[y] += c;
+        m_text[y] += c;
 
         if (c == '\n')
         {
-            m_rows.push_back("");
+            m_text.push_back("");
             y++;
         }
     }
 }
-
-void Editor::save_to_file()
-{
-    std::ofstream file{m_filename, std::ios_base::trunc};
-    file.exceptions(std::ifstream::badbit | std::ifstream::failbit);
-
-    for (const auto& row : m_rows)
-    {
-        file << row;
-    }
-}
-
 void Editor::move_cursor(WINDOW* win, Vec2 pos)
 {
     wmove(win, pos.y, pos.x);
-}
-
-void Editor::move_cursor_down()
-{
-    m_cursor_pos.y++;
-    if (m_cursor_pos.y >= m_editor_win_size.y)
-    {
-        if (m_starting_line_num + m_cursor_pos.y < m_rows.size())
-            m_starting_line_num++;
-
-        m_cursor_pos.y = m_editor_win_size.y - 1;
-    }
-    else if (m_rows[cur_pos_in_editor().y].size() <= cur_pos_in_editor().x)
-    {
-        m_cursor_pos.x = m_rows[cur_pos_in_editor().y].size() - 1;
-    }
-}
-
-void Editor::move_cursor_up()
-{
-    m_cursor_pos.y--;
-    if (m_cursor_pos.y < 0)
-    {
-        if (m_starting_line_num != 0)
-            m_starting_line_num--;
-
-        m_cursor_pos.y = 0;
-    }
-    else if (m_rows[cur_pos_in_editor().y].size() <= cur_pos_in_editor().x)
-    {
-        m_cursor_pos.x = m_rows[cur_pos_in_editor().y].size() - 1;
-    }
-}
-
-void Editor::move_cursor_left()
-{
-    m_cursor_pos.x--;
-    if (m_cursor_pos.x < 0)
-    {
-        move_cursor_up();
-    }
-}
-
-void Editor::move_cursor_right()
-{
-    m_cursor_pos.x++;
-    if (cur_pos_in_editor().x >= m_rows[cur_pos_in_editor().y].size())
-    {
-        move_cursor_down();
-        m_cursor_pos.x = 0;
-    }
-}
-
-constexpr Vec2 Editor::cur_pos_in_editor() const
-{
-    return {m_cursor_pos.x, m_cursor_pos.y + m_starting_line_num};
-}
-
-bool Editor::write(Vec2 pos, char ch)
-{
-    if (pos.y >= m_rows.size())
-    {
-        return false;
-    }
-    else if (pos.x >= m_rows[pos.y].size())
-    {
-        return false;
-    }
-
-    m_rows[pos.y].insert(pos.x, 1, ch);
-
-    if (ch == '\n')
-    {
-        m_rows.insert(m_rows.begin() + pos.y + 1, m_rows[pos.y].substr(pos.x + 1));
-        // Remove the contents that were appended from the previous line.
-        m_rows[pos.y] = m_rows[pos.y].substr(0, pos.x + 1);
-    }
-
-    return true;
-}
-
-bool Editor::del(Vec2 pos)
-{
-    if (pos.y >= m_rows.size())
-    {
-        return false;
-    }
-    else if (pos.x >= m_rows[pos.y].size() || pos.x <= 0)
-    {
-        // Handle deleting lines.
-        if (pos.x == 0 && pos.y != 0)
-        {
-            // Lines that only contain '\n'.
-            if (m_rows[pos.y][pos.x] == '\n')
-            {
-                m_rows.erase(m_rows.begin() + pos.y);
-                return true;
-            }
-
-            // Delete the last character (it's always \n).
-            m_rows[pos.y - 1] = m_rows[pos.y - 1].substr(0, m_rows[pos.y - 1].size() - 1);
-
-            m_rows[pos.y - 1] += m_rows[pos.y];
-            m_rows.erase(m_rows.begin() + pos.y);
-            return true;
-        }
-        return false;
-    }
-
-    m_rows[pos.y].erase(pos.x - 1, 1);
-
-    return true;
 }
 
 WINDOW* Editor::create_window(Vec2 size, Vec2 pos) const
