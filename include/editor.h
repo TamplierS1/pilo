@@ -13,6 +13,10 @@
 
 namespace Pilo
 {
+// ncurses' KEY_BACKSPACE doesn't work for some reason.
+constexpr int g_key_backspace = 127;
+constexpr int g_key_ctrl_backspace = 263;
+
 enum class State
 {
     Alive,
