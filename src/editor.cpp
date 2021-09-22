@@ -72,6 +72,42 @@ void Editor::process_input()
         case ctrl_key('s'):
             save_to_file();
             break;
+        case g_key_ctrl_backspace:
+        {
+            // TODO: separate all editor actions into `Action` class.
+            if (m_rows[cur_pos_in_editor().y][cur_pos_in_editor().x - 1] == ' ')
+            {
+                while (m_rows[cur_pos_in_editor().y][cur_pos_in_editor().x - 1] == ' ' &&
+                       cur_pos_in_editor().x != 0)
+                {
+                    if (del(cur_pos_in_editor()))
+                    {
+                        m_cursor_pos.x--;
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+            }
+            else
+            {
+                while (m_rows[cur_pos_in_editor().y][cur_pos_in_editor().x - 1] != ' ' &&
+                       cur_pos_in_editor().x != 0)
+                {
+                    if (del(cur_pos_in_editor()))
+                    {
+                        m_cursor_pos.x--;
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+            }
+
+            break;
+        }
         case KEY_UP:
             move_cursor_up();
             break;
@@ -84,10 +120,8 @@ void Editor::process_input()
         case KEY_RIGHT:
             move_cursor_right();
             break;
-        case 8:  // Backspace
-        case 127:
+        case g_key_backspace:
         {
-            // TODO: make a ctrl-backspace hotkey. And something to delete entire lines.
             // If a line gets deleted, the cursor will be moved to this index.
             int new_cursor_pos = m_rows[cur_pos_in_editor().y - 1].size() - 1;
             if (del(cur_pos_in_editor()))
@@ -294,7 +328,6 @@ bool Editor::write(Vec2 pos, char ch)
 
     m_rows[pos.y].insert(pos.x, 1, ch);
 
-    // TODO: separate this case into a different method.
     if (ch == '\n')
     {
         m_rows.insert(m_rows.begin() + pos.y + 1, m_rows[pos.y].substr(pos.x + 1));
@@ -313,9 +346,8 @@ bool Editor::del(Vec2 pos)
     }
     else if (pos.x >= m_rows[pos.y].size() || pos.x <= 0)
     {
-        // TODO: separate this case into a different method.
         // Handle deleting lines.
-        if (pos.x == 0)
+        if (pos.x == 0 && pos.y != 0)
         {
             // Lines that only contain '\n'.
             if (m_rows[pos.y][pos.x] == '\n')
