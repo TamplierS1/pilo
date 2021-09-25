@@ -85,7 +85,7 @@ void Editor::process_input()
             m_actions.emplace_back(std::make_unique<SaveFileAction>(action));
             break;
         }
-        case g_key_ctrl_backspace:
+        case ctrl_key(8):
         {
             DeleteAction action;
             action.m_mode = DeleteAction::Mode::Word;
@@ -121,6 +121,7 @@ void Editor::process_input()
             break;
         }
         case g_key_backspace:
+        case KEY_BACKSPACE:
         {
             DeleteAction action;
             action.m_mode = DeleteAction::Mode::Char;
@@ -167,12 +168,12 @@ void Editor::render_status_window()
     move_cursor(m_status_window, {0, 0});
 
     wattron(m_status_window, COLOR_PAIR(ColorStatusWin) | A_BOLD);
-    // wprintw(m_status_window, "%s -- %s\n", m_filename.c_str(),
-    //         get_current_time().c_str());
+    wprintw(m_status_window, "%s -- %s\n", m_filename.c_str(),
+            get_current_time().c_str());
     // ! Debug information.
-    wprintw(m_status_window, "%d;%d", cur_pos_in_editor().x, cur_pos_in_editor().y);
-    if (m_text.size() > cur_pos_in_editor().y)
-        wprintw(m_status_window, " -- %s", m_text[cur_pos_in_editor().y].c_str());
+    // wprintw(m_status_window, "%d;%d", cur_pos_in_editor().x, cur_pos_in_editor().y);
+    // if (m_text.size() > cur_pos_in_editor().y)
+    //     wprintw(m_status_window, " -- %s", m_text[cur_pos_in_editor().y].c_str());
     wattroff(m_status_window, COLOR_PAIR(ColorStatusWin) | A_BOLD);
 }
 
