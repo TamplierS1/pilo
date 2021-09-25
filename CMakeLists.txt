@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.17.0)
+cmake_minimum_required(VERSION 3.16.3)
 project(pilo)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -26,8 +26,6 @@ set(CXX_LINK_LIBS)
 list(APPEND CXX_INCLUDE_DIRS "include")
 
 # fmtlib
-find_package(fmt)
-list(APPEND CXX_LINK_LIBS fmt::fmt-header-only)
 list(APPEND CXX_LINK_LIBS ncurses)
 
 target_compile_options(pilo PRIVATE ${CXX_COMPILE_FLAGS})
