@@ -2,6 +2,13 @@
 
 Simple code editor written in C++.
 
+## Controls
+
+Save:  
+    `Ctrl+s`  
+Exit:  
+    `Ctrl+q`
+
 ## Dependencies
 
 - [ncurses](https://invisible-island.net/ncurses/announce.html)
