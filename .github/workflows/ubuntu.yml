@@ -1,0 +1,19 @@
+name: Ubuntu
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: install ncurses
+      run: sudo apt-get install libncurses5-dev
+    - name: build
+      run: |
+        mkdir build
+        cd build
+        cmake ..
+        make -j8
+
+
+
+
